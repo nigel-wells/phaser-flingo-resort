@@ -63,7 +63,7 @@ export class PlayScene extends Phaser.Scene {
         const sceneScale = sceneConfig.characterScale || 1.0;
         
         if (src && src.width && src.height) {
-            const desiredH = 240; // base doubled player height in pixels
+            const desiredH = 240 * this.scaleFactor; // base doubled player height in pixels, scaled to screen
             const scale = desiredH / src.height;
             const baseW = src.width * scale;
             const baseH = src.height * scale;
@@ -413,8 +413,8 @@ export class PlayScene extends Phaser.Scene {
             }
         } else {
             // derive dynamic padding from player display size so larger characters spawn further from edges
-            const padX = (cfg.entryPadX != null) ? cfg.entryPadX : Math.max(Math.round(this.player.displayWidth * 0.5), 48);
-            const padY = (cfg.entryPadY != null) ? cfg.entryPadY : Math.max(Math.round(this.player.displayHeight * 0.5), 32);
+            const padX = (cfg.entryPadX != null) ? cfg.entryPadX * this.scaleFactor : Math.max(Math.round(this.player.displayWidth * 0.5), 48);
+            const padY = (cfg.entryPadY != null) ? cfg.entryPadY * this.scaleFactor : Math.max(Math.round(this.player.displayHeight * 0.5), 32);
             if (entry === 'fromRight') {
                 // place sprite so its left edge is `padX` from world left: center = padX + displayWidth * ox
                 intendedX = padX + (this.player.displayWidth * ox);
@@ -719,15 +719,17 @@ export class PlayScene extends Phaser.Scene {
         for (const npcConfig of cfg.npcs) {
             if (!npcConfig.key) continue;
             
-            // Create sprite for NPC
-            const npc = this.add.sprite(npcConfig.x, npcConfig.y, npcConfig.key);
+            // Create sprite for NPC at scaled position
+            const npcX = npcConfig.x * this.scaleFactor;
+            const npcY = npcConfig.y * this.scaleFactor;
+            const npc = this.add.sprite(npcX, npcY, npcConfig.key);
             npc.setOrigin(0.5, 0.5);
             
             // Apply sizing logic: NPCs scale with the scene, then by their individual scale
             // npcConfig.scale: 1.0 = normal size for this scene; 0.8 = 80% of normal; 1.5 = 150% of normal
             const src = this.textures.get(npcConfig.key).getSourceImage();
             if (src && src.width && src.height) {
-                const desiredH = 240; // base character height in pixels
+                const desiredH = 240 * this.scaleFactor; // base character height in pixels, scaled to screen
                 const scale = desiredH / src.height;
                 const baseW = src.width * scale;
                 const baseH = src.height * scale;
@@ -761,21 +763,22 @@ export class PlayScene extends Phaser.Scene {
         if (this.isDialogOpen) return;
 
         this.isDialogOpen = true;
-        const gameWidth = this.game.config.width;
-        const gameHeight = this.game.config.height;
+        // Use camera/screen dimensions for dialog positioning since it has scrollFactor(0)
+        const screenWidth = this.cameras.main.width;
+        const screenHeight = this.cameras.main.height;
 
         // Create semi-transparent background overlay
-        this.dialogBox = this.add.rectangle(gameWidth / 2, gameHeight * 0.75, gameWidth * 0.8, 200, 0x000000, 0.7);
+        this.dialogBox = this.add.rectangle(screenWidth / 2, screenHeight * 0.75, screenWidth * 0.8, 200, 0x000000, 0.7);
         this.dialogBox.setDepth(200);
         this.dialogBox.setScrollFactor(0);
 
         // Create dialog text
-        this.dialogText = this.add.text(gameWidth / 2, gameHeight * 0.75, text, {
-            fontSize: '40px',
+        this.dialogText = this.add.text(screenWidth / 2, screenHeight * 0.75, text, {
+            fontSize: this.getScaledFontSize(screenWidth, 0.04), // 4% of screen width
             fontStyle: 'bold',
             color: '#ffffff',
             align: 'center',
-            wordWrap: { width: gameWidth * 0.75 }
+            wordWrap: { width: screenWidth * 0.75 }
         });
         this.dialogText.setOrigin(0.5, 0.5);
         this.dialogText.setDepth(201);
@@ -855,10 +858,25 @@ export class PlayScene extends Phaser.Scene {
             this.player.x = Phaser.Math.Clamp(this.player.x, margin, this.worldWidth - margin);
             this.player.y = Phaser.Math.Clamp(this.player.y, margin, this.worldHeight - margin);
             
-            // Rescale player character
-            if (this.baseDisplayWidth && this.baseDisplayHeight) {
-                const newW = Math.round(this.baseDisplayWidth * this.scaleFactor);
-                const newH = Math.round(this.baseDisplayHeight * this.scaleFactor);
+            // Rescale player character using same logic as create method
+            const src = this.textures.get(this.selected).getSourceImage();
+            if (src && src.width && src.height) {
+                // Use same calculation as create method, but scale desiredH with screen size
+                const desiredH = 240 * newScaleFactor; // base doubled player height in pixels, scaled to screen
+                const scale = desiredH / src.height;
+                const baseW = src.width * scale;
+                const baseH = src.height * scale;
+
+                // Update stored base dimensions
+                this.baseDisplayWidth = baseW;
+                this.baseDisplayHeight = baseH;
+
+                // Apply current scene scale
+                const currentCfg = sceneConfigs[this.currentBackground] || {};
+                const sceneScale = currentCfg.characterScale || 1.0;
+                const newW = Math.round(baseW * sceneScale);
+                const newH = Math.round(baseH * sceneScale);
+
                 this.player.setDisplaySize(newW, newH);
                 // Update collision dimensions
                 this.collisionWidth = newW * 1.05;
@@ -874,7 +892,7 @@ export class PlayScene extends Phaser.Scene {
                 this.targetScaleY = this.baseScaleY;
             }
             
-            // Rescale NPCs
+            // Rescale and reposition NPCs
             const sceneConfig = sceneConfigs[this.currentBackground] || {};
             const sceneScale = sceneConfig.characterScale || 1.0;
             for (const npcKey in this.npcs) {
@@ -882,16 +900,21 @@ export class PlayScene extends Phaser.Scene {
                 if (npc && npc.texture) {
                     const npcConfig = sceneConfig.npcs?.find(n => n.key === npcKey);
                     if (npcConfig) {
+                        // Reposition NPC
+                        const newNpcX = npcConfig.x * this.scaleFactor;
+                        const newNpcY = npcConfig.y * this.scaleFactor;
+                        npc.setPosition(newNpcX, newNpcY);
+                        
                         const src = this.textures.get(npcKey).getSourceImage();
                         if (src && src.width && src.height) {
-                            const desiredH = 240;
+                            const desiredH = 240 * newScaleFactor; // base character height in pixels, scaled to screen
                             const scale = desiredH / src.height;
                             const baseW = src.width * scale;
                             const baseH = src.height * scale;
                             
                             const npcScale = npcConfig.scale || 1.0;
-                            const finalW = Math.round(baseW * sceneScale * npcScale * this.scaleFactor);
-                            const finalH = Math.round(baseH * sceneScale * npcScale * this.scaleFactor);
+                            const finalW = Math.round(baseW * sceneScale * npcScale);
+                            const finalH = Math.round(baseH * sceneScale * npcScale);
                             npc.setDisplaySize(finalW, finalH);
                             
                             // Reapply crop if specified
@@ -909,6 +932,31 @@ export class PlayScene extends Phaser.Scene {
             }
             
             console.log(`Resized to ${canvasWidth}x${gameSize.height}, scale: ${this.scaleFactor.toFixed(3)}`);
+        }
+        
+        // Update dialog elements if they exist
+        if (this.isDialogOpen && this.dialogBox && this.dialogText) {
+            const screenWidth = this.cameras.main.width;
+            const screenHeight = this.cameras.main.height;
+            
+            // Update dialog box size and position
+            this.dialogBox.setPosition(screenWidth / 2, screenHeight * 0.75);
+            this.dialogBox.setSize(screenWidth * 0.8, 200);
+            
+            // Update dialog text position, font size, and word wrap
+            this.dialogText.setPosition(screenWidth / 2, screenHeight * 0.75);
+            
+            // Safely update font size with error handling
+            try {
+                const newFontSize = this.getScaledFontSize(screenWidth, 0.04);
+                if (newFontSize && parseInt(newFontSize) > 0) {
+                    this.dialogText.setFontSize(newFontSize);
+                }
+            } catch (error) {
+                console.warn('Failed to update dialog font size:', error);
+            }
+            
+            this.dialogText.setWordWrapWidth(screenWidth * 0.75);
         }
     }
 
@@ -961,6 +1009,10 @@ export class PlayScene extends Phaser.Scene {
             this.scale.off('resize', this.handleResize, this);
         }
         super.destroy();
+    }
+
+    getScaledFontSize(screenWidth, percentage) {
+        return Math.round(screenWidth * percentage) + 'px';
     }
 }
 

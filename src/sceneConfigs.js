@@ -12,7 +12,7 @@ export const sceneConfigs = {
       fromLeft: (w, h) => ({ x: 16, y: Math.round(h * 0.5) }),
       fromRight: (w, h) => ({ x: w - 16, y: Math.round(h * 0.55) }),
       fromTop: (w, h) => ({ x: Math.round(w * 0.5), y: 16 }),
-      fromBottom: (w, h) => ({ x: 768, y: 479 + 16 }) // From resort-reception, positioned under 3rd obstacle
+      fromBottom: (w, h) => ({ x: Math.round(768 * (w / 1536)), y: Math.round((479 + 16) * (h / 1024)) }) // From resort-reception, positioned under 3rd obstacle
     },
     // which sides allow exiting this scene
     allowedExits: ['right'],
@@ -47,7 +47,7 @@ export const sceneConfigs = {
     entryPositions: {
       fromLeft: (w, h) => ({ x: 16, y: Math.round(h * 0.5) }),
       fromRight: (w, h) => ({ x: w - 16, y: Math.round(h * 0.6) }),
-      fromTop: (w, h) => ({ x: Math.round(w * 0.5), y: 479 }),
+      fromTop: (w, h) => ({ x: Math.round(w * 0.5), y: Math.round(479 * (h / 1024)) }),
       fromBottom: (w, h) => ({ x: Math.round(w * 0.5), y: h - 16 })
     },
     // only allow exiting to the left from this scene
@@ -82,7 +82,7 @@ export const sceneConfigs = {
     entryPositions: {
       fromLeft: (w, h) => ({ x: 16, y: Math.round(h * 0.5) }),
       fromRight: (w, h) => ({ x: w - 16, y: Math.round(h * 0.55) }),
-      fromTop: (w, h) => ({ x: 768, y: h - 16 }), // Entering from resort-outside, appear at bottom
+      fromTop: (w, h) => ({ x: Math.round(768 * (w / 1536)), y: h - 16 }), // Entering from resort-outside, appear at bottom
       fromBottom: (w, h) => ({ x: Math.round(w * 0.5), y: h - 16 })
     },
     // allow exiting to the bottom (back to resort-outside)

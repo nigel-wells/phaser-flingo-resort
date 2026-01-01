@@ -3,6 +3,9 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="theme-color" content="#ffffff">
+        <meta name="description" content="A pixel-art adventure game at the Flingo Resort">
+        <link rel="manifest" href="manifest.json">
         <title>Flingo Resort</title>
         <style>
             /* Reset CSS: Please avoid making changes here unless you know what you're doing :) */
@@ -45,5 +48,48 @@
         <div id="game-container"></div>
         <script src="./phaser.js"></script>
         <script type="module" src="./src/main.js"></script>
+        <script>
+            // Register service worker for PWA functionality
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('/sw.js')
+                        .then(registration => {
+                            console.log('SW registered: ', registration);
+
+                            // Force update to new service worker immediately
+                            registration.update();
+
+                            // If there's a waiting service worker, activate it immediately
+                            if (registration.waiting) {
+                                registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                            }
+
+                            // Listen for new service worker becoming available
+                            registration.addEventListener('updatefound', () => {
+                                const newWorker = registration.installing;
+                                if (newWorker) {
+                                    newWorker.addEventListener('statechange', () => {
+                                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                            // New version available, activate it
+                                            newWorker.postMessage({ type: 'SKIP_WAITING' });
+                                        }
+                                    });
+                                }
+                            });
+                        })
+                        .catch(registrationError => {
+                            console.log('SW registration failed: ', registrationError);
+                        });
+                });
+
+                // Listen for service worker messages
+                navigator.serviceWorker.addEventListener('message', event => {
+                    if (event.data && event.data.type === 'SKIP_WAITING') {
+                        // Reload the page to activate the new service worker
+                        window.location.reload();
+                    }
+                });
+            }
+        </script>
     </body>
     </html>

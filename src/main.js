@@ -24,7 +24,7 @@ const config = {
         PlayScene
     ],
     scale: {
-        mode: Phaser.Scale.FIT,
+        mode: Phaser.Scale.RESIZE,
         autoCenter: Phaser.Scale.CENTER_BOTH,
         expandParent: true
     },
@@ -32,5 +32,5 @@ const config = {
 
 const game = new Phaser.Game(config);
 // Set debug flag in game registry so scenes can access it
-game.registry.set('debugMode', false);
+game.registry.set('debugMode', true);
             

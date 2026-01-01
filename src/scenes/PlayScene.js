@@ -26,24 +26,31 @@ export class PlayScene extends Phaser.Scene {
     create() {
         const gameWidth = this.game.config.width;   // 1536
         const gameHeight = this.game.config.height; // 1024
+        const canvasWidth = this.cameras.main.width;
         
-        // Create tileSprite at game dimensions
-        this.bg = this.add.tileSprite(gameWidth / 2, gameHeight / 2, gameWidth, gameHeight, 'grass');
-        this.bg.setScrollFactor(0); // Keep background fixed, don't scroll with camera
+        // Calculate scale factor to match window width
+        this.scaleFactor = canvasWidth / gameWidth;
+        const scaledWidth = gameWidth * this.scaleFactor;
+        const scaledHeight = gameHeight * this.scaleFactor;
+        
+        // Create background sprite scaled to window width
+        this.bg = this.add.sprite(scaledWidth / 2, scaledHeight / 2, 'grass');
+        this.bg.setScale(this.scaleFactor);
+        this.bg.setScrollFactor(1); // Move with camera for panning effect
         this.currentBackground = 'grass'; // default starting scene
 
-        // Create world bounds and player — but guard if physics isn't available
-        this.worldWidth = gameWidth;
-        this.worldHeight = gameHeight;
+        // Create world bounds and player — scaled to match window
+        this.worldWidth = scaledWidth;
+        this.worldHeight = scaledHeight;
         if (this.physics && this.physics.world && this.physics.add) {
-            this.physics.world.setBounds(0, 0, gameWidth, gameHeight);
+            this.physics.world.setBounds(0, 0, this.worldWidth, this.worldHeight);
 
-            this.player = this.physics.add.sprite(gameWidth / 2, gameHeight / 2 + 40, this.selected);
+            this.player = this.physics.add.sprite(this.worldWidth / 2, this.worldHeight / 2 + 40, this.selected);
             this.player.setCollideWorldBounds(true);
             this.usePhysics = true;
         } else {
             console.warn('Arcade Physics not available; falling back to non-physics movement');
-            this.player = this.add.sprite(gameWidth / 2, gameHeight / 2 + 40, this.selected);
+            this.player = this.add.sprite(this.worldWidth / 2, this.worldHeight / 2 + 40, this.selected);
             this.usePhysics = false;
         }
         this.player.setOrigin(0.5, 0.5);
@@ -90,6 +97,17 @@ export class PlayScene extends Phaser.Scene {
             this.player.body.setCollideWorldBounds(true);
         }
 
+        // Set camera to follow player and constrain to world bounds
+        if (this.player) {
+            this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+            this.cameras.main.setBounds(0, 0, this.worldWidth, this.worldHeight);
+        } else {
+            console.error('Player sprite could not be created - camera following disabled');
+        }
+
+        // Handle dynamic canvas resize
+        this.scale.on('resize', this.handleResize, this);
+
         this.cursors = this.input.keyboard.createCursorKeys();
 
         this.SPEED = 180;
@@ -106,7 +124,7 @@ export class PlayScene extends Phaser.Scene {
         // debug graphics for obstacles
         this.debugGraphics = this.add.graphics();
         this.debugGraphics.setDepth(999);
-        this.debugGraphics.setScrollFactor(0);
+        this.debugGraphics.setScrollFactor(1); // Move with camera/world
         this.drawObstacleDebug();
 
         // We'll use per-frame lerping toward a target scale to create a squash/stretch
@@ -155,8 +173,11 @@ export class PlayScene extends Phaser.Scene {
         // Touch input: if touched, move toward touch point (unless arrow keys are pressed)
         let isUsingTouch = false;
         if (vx === 0 && vy === 0 && this.input.activePointer.isDown) {
-            const touchX = this.input.activePointer.x;
-            const touchY = this.input.activePointer.y;
+            // Convert touch screen coordinates to world coordinates
+            const worldPoint = this.cameras.main.getWorldPoint(this.input.activePointer.x, this.input.activePointer.y);
+            const touchX = worldPoint.x;
+            const touchY = worldPoint.y;
+            
             const dx = touchX - this.player.x;
             const dy = touchY - this.player.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
@@ -323,7 +344,31 @@ export class PlayScene extends Phaser.Scene {
         const cfg = sceneConfigs[sceneKey];
         if (!cfg) return;
         this.currentBackground = sceneKey;
+        
+        // Update background texture and scale to match window width
         this.bg.setTexture(cfg.texture || cfg.key);
+        this.bg.setScale(this.scaleFactor);
+        this.bg.setPosition(this.worldWidth / 2, this.worldHeight / 2);
+        
+        // Update physics world bounds
+        if (this.physics && this.physics.world) {
+            this.physics.world.setBounds(0, 0, this.worldWidth, this.worldHeight);
+        }
+        this.cameras.main.setBounds(0, 0, this.worldWidth, this.worldHeight);
+        
+        // Create scaled obstacles
+        this.scaledObstacles = [];
+        if (cfg.obstacles) {
+            for (const obs of cfg.obstacles) {
+                this.scaledObstacles.push({
+                    ...obs,
+                    x: obs.x * this.scaleFactor,
+                    y: obs.y * this.scaleFactor,
+                    width: obs.width * this.scaleFactor,
+                    height: obs.height * this.scaleFactor
+                });
+            }
+        }
 
         // Apply character scale if different from current scene
         const newSceneScale = cfg.characterScale || 1.0;
@@ -435,8 +480,7 @@ export class PlayScene extends Phaser.Scene {
     }
 
     checkObstacleCollisions() {
-        const currentCfg = sceneConfigs[this.currentBackground] || {};
-        const obstacles = currentCfg.obstacles || [];
+        const obstacles = this.scaledObstacles || [];
 
         if (obstacles.length === 0) return;
 
@@ -615,8 +659,7 @@ export class PlayScene extends Phaser.Scene {
     drawObstacleDebug() {
         if (!this.debugGraphics) return;
         
-        const currentCfg = sceneConfigs[this.currentBackground] || {};
-        const obstacles = currentCfg.obstacles || [];
+        const obstacles = this.scaledObstacles || [];
         
         this.debugGraphics.clear();
         
@@ -763,6 +806,161 @@ export class PlayScene extends Phaser.Scene {
             this.dialogText.destroy();
             this.dialogText = null;
         }
+    }
+
+    handleResize(gameSize) {
+        // Recalculate scale factor based on new canvas size
+        const canvasWidth = gameSize.width;
+        const gameWidth = this.game.config.width;
+        const newScaleFactor = canvasWidth / gameWidth;
+        
+        // Only update if scale factor actually changed
+        if (Math.abs(newScaleFactor - this.scaleFactor) > 0.001) {
+            this.scaleFactor = newScaleFactor;
+            
+            // Update world dimensions
+            const gameHeight = this.game.config.height;
+            this.worldWidth = gameWidth * this.scaleFactor;
+            this.worldHeight = gameHeight * this.scaleFactor;
+            
+            // Update background
+            this.bg.setScale(this.scaleFactor);
+            this.bg.setPosition(this.worldWidth / 2, this.worldHeight / 2);
+            
+            // Update physics world bounds
+            if (this.physics && this.physics.world) {
+                this.physics.world.setBounds(0, 0, this.worldWidth, this.worldHeight);
+            }
+            
+            // Update camera bounds
+            this.cameras.main.setBounds(0, 0, this.worldWidth, this.worldHeight);
+            
+            // Rescale obstacles
+            this.scaledObstacles = [];
+            const currentCfg = sceneConfigs[this.currentBackground] || {};
+            if (currentCfg.obstacles) {
+                for (const obs of currentCfg.obstacles) {
+                    this.scaledObstacles.push({
+                        ...obs,
+                        x: obs.x * this.scaleFactor,
+                        y: obs.y * this.scaleFactor,
+                        width: obs.width * this.scaleFactor,
+                        height: obs.height * this.scaleFactor
+                    });
+                }
+            }
+            
+            // Reposition player if they're outside new bounds
+            const margin = 50;
+            this.player.x = Phaser.Math.Clamp(this.player.x, margin, this.worldWidth - margin);
+            this.player.y = Phaser.Math.Clamp(this.player.y, margin, this.worldHeight - margin);
+            
+            // Rescale player character
+            if (this.baseDisplayWidth && this.baseDisplayHeight) {
+                const newW = Math.round(this.baseDisplayWidth * this.scaleFactor);
+                const newH = Math.round(this.baseDisplayHeight * this.scaleFactor);
+                this.player.setDisplaySize(newW, newH);
+                // Update collision dimensions
+                this.collisionWidth = newW * 1.05;
+                this.collisionHeight = newH;
+                // Update physics body if applicable
+                if (this.usePhysics && this.player.body && this.player.body.setSize) {
+                    this.player.body.setSize(newW, newH, true);
+                }
+                // Update scale values for animation
+                this.baseScaleX = this.player.scaleX;
+                this.baseScaleY = this.player.scaleY;
+                this.targetScaleX = this.baseScaleX;
+                this.targetScaleY = this.baseScaleY;
+            }
+            
+            // Rescale NPCs
+            const sceneConfig = sceneConfigs[this.currentBackground] || {};
+            const sceneScale = sceneConfig.characterScale || 1.0;
+            for (const npcKey in this.npcs) {
+                const npc = this.npcs[npcKey];
+                if (npc && npc.texture) {
+                    const npcConfig = sceneConfig.npcs?.find(n => n.key === npcKey);
+                    if (npcConfig) {
+                        const src = this.textures.get(npcKey).getSourceImage();
+                        if (src && src.width && src.height) {
+                            const desiredH = 240;
+                            const scale = desiredH / src.height;
+                            const baseW = src.width * scale;
+                            const baseH = src.height * scale;
+                            
+                            const npcScale = npcConfig.scale || 1.0;
+                            const finalW = Math.round(baseW * sceneScale * npcScale * this.scaleFactor);
+                            const finalH = Math.round(baseH * sceneScale * npcScale * this.scaleFactor);
+                            npc.setDisplaySize(finalW, finalH);
+                            
+                            // Reapply crop if specified
+                            if (npcConfig.crop) {
+                                const crop = npcConfig.crop;
+                                const cropX = Math.round((crop.x || 0) / 100 * src.width);
+                                const cropY = Math.round((crop.y || 0) / 100 * src.height);
+                                const cropWidth = Math.round((crop.width || 100) / 100 * src.width);
+                                const cropHeight = Math.round((crop.height || 100) / 100 * src.height);
+                                npc.setCrop(cropX, cropY, cropWidth, cropHeight);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            console.log(`Resized to ${canvasWidth}x${gameSize.height}, scale: ${this.scaleFactor.toFixed(3)}`);
+        }
+    }
+
+    drawObstacleDebug() {
+        if (!this.debugGraphics) return;
+        
+        const obstacles = this.scaledObstacles || [];
+        
+        this.debugGraphics.clear();
+        
+        // Draw red obstacles
+        if (this.debugMode && obstacles.length > 0) {
+            this.debugGraphics.lineStyle(3, 0xff0000, 1); // Red outline, 3px thick
+            this.debugGraphics.fillStyle(0xff0000, 0.2); // Red fill, 20% opacity
+            
+            for (const obs of obstacles) {
+                this.debugGraphics.fillRect(obs.x, obs.y, obs.width, obs.height);
+                this.debugGraphics.strokeRect(obs.x, obs.y, obs.width, obs.height);
+            }
+        }
+
+        // Draw blue box around fixed collision bounds
+        if (this.debugMode && this.player) {
+            const ox = (typeof this.player.originX === 'number') ? this.player.originX : 0.5;
+            const oy = (typeof this.player.originY === 'number') ? this.player.originY : 0.5;
+            
+            const pLeft = this.player.x - this.collisionWidth * ox;
+            const pTop = this.player.y - this.collisionHeight * oy;
+            
+            this.debugGraphics.lineStyle(2, 0x0000ff, 1); // Blue outline, 2px thick
+            this.debugGraphics.strokeRect(pLeft, pTop, this.collisionWidth, this.collisionHeight);
+        }
+
+        // Draw purple box around animated display bounds
+        if (this.debugMode && this.player) {
+            const ox = (typeof this.player.originX === 'number') ? this.player.originX : 0.5;
+            const oy = (typeof this.player.originY === 'number') ? this.player.originY : 0.5;
+            
+            const pLeft = this.player.x - this.player.displayWidth * ox;
+            const pTop = this.player.y - this.player.displayHeight * oy;
+            
+            this.debugGraphics.lineStyle(2, 0xff00ff, 1); // Purple outline, 2px thick
+            this.debugGraphics.strokeRect(pLeft, pTop, this.player.displayWidth, this.player.displayHeight);
+        }
+    }
+
+    destroy() {
+        // Clean up resize listener
+        if (this.scale && this.scale.off) {
+            this.scale.off('resize', this.handleResize, this);
+        }
+        super.destroy();
     }
 }
 

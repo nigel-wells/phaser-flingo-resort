@@ -69,7 +69,7 @@ export const sceneConfigs = {
       { x: 0, y: 711, width: 493, height: 313 }
     ],
     // character scale for this scene (80% size)
-    characterScale: 0.8,
+    characterScale: 0.6,
     bounds: null
   },
   'resort-reception': {

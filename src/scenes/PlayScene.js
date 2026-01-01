@@ -152,6 +152,21 @@ export class PlayScene extends Phaser.Scene {
         if (cursors.up.isDown) vy = -1;
         else if (cursors.down.isDown) vy = 1;
 
+        // Touch input: if touched, move toward touch point (unless arrow keys are pressed)
+        if (vx === 0 && vy === 0 && this.input.activePointer.isDown) {
+            const touchX = this.input.activePointer.x;
+            const touchY = this.input.activePointer.y;
+            const dx = touchX - this.player.x;
+            const dy = touchY - this.player.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            // Only move if touch is at least 10 pixels away (dead zone)
+            if (dist > 10) {
+                vx = dx / dist;
+                vy = dy / dist;
+            }
+        }
+
         // Store intended movement direction for collision checking
         this.intendedVx = vx;
         this.intendedVy = vy;

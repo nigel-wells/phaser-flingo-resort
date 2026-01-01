@@ -1,4 +1,4 @@
-const CACHE_NAME = 'flingo-resort-v4';
+const CACHE_NAME = 'flingo-resort-v6';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -29,6 +29,10 @@ self.addEventListener('install', event => {
         console.log('Opened cache');
         return cache.addAll(urlsToCache);
       })
+      .then(() => {
+        // Immediately activate the new service worker instead of waiting
+        self.skipWaiting();
+      })
   );
 });
 
@@ -54,7 +58,7 @@ self.addEventListener('fetch', event => {
   );
 });
 
-// Activate event - clean up old caches
+// Activate event - clean up old caches and claim all clients
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(cacheNames => {
@@ -66,6 +70,9 @@ self.addEventListener('activate', event => {
           }
         })
       );
+    }).then(() => {
+      // Immediately claim all clients so they use the new service worker
+      return self.clients.claim();
     })
   );
 });
@@ -74,5 +81,11 @@ self.addEventListener('activate', event => {
 self.addEventListener('message', event => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
+    // Notify all clients that they should reload
+    self.clients.matchAll().then(clients => {
+      clients.forEach(client => {
+        client.postMessage({ type: 'RELOAD_PAGE' });
+      });
+    });
   }
 });

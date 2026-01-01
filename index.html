@@ -130,8 +130,8 @@
 
                 // Listen for service worker messages
                 navigator.serviceWorker.addEventListener('message', event => {
-                    if (event.data && event.data.type === 'SKIP_WAITING') {
-                        // Reload the page to activate the new service worker
+                    if (event.data && event.data.type === 'RELOAD_PAGE') {
+                        // New service worker is ready, reload to use it
                         window.location.reload();
                     }
                 });

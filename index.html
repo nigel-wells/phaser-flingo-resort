@@ -42,13 +42,62 @@
                 text-decoration: none;
                 color: inherit;
             }
+
+            /* Update banner styles */
+            #update-banner {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                background: linear-gradient(135deg, #4CAF50, #45a049);
+                color: white;
+                padding: 15px;
+                text-align: center;
+                font-size: 16px;
+                font-weight: bold;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                z-index: 10000;
+                transform: translateY(-100%);
+                transition: transform 0.3s ease;
+                cursor: pointer;
+            }
+
+            #update-banner.show {
+                transform: translateY(0);
+            }
+
+            #update-banner:hover {
+                background: linear-gradient(135deg, #45a049, #4CAF50);
+            }
         </style>
     </head>
     <body>
+        <div id="update-banner" onclick="updateApp()">
+            🎮 New version available! Click to update Flingo Resort
+        </div>
         <div id="game-container"></div>
         <script src="./phaser.js"></script>
         <script type="module" src="./src/main.js"></script>
         <script>
+            let newWorker = null;
+
+            function showUpdateBanner() {
+                const banner = document.getElementById('update-banner');
+                banner.classList.add('show');
+            }
+
+            function hideUpdateBanner() {
+                const banner = document.getElementById('update-banner');
+                banner.classList.remove('show');
+            }
+
+            function updateApp() {
+                if (newWorker) {
+                    newWorker.postMessage({ type: 'SKIP_WAITING' });
+                    hideUpdateBanner();
+                }
+            }
+
             // Register service worker for PWA functionality
             if ('serviceWorker' in navigator) {
                 window.addEventListener('load', () => {
@@ -56,22 +105,19 @@
                         .then(registration => {
                             console.log('SW registered: ', registration);
 
-                            // Force update to new service worker immediately
-                            registration.update();
-
-                            // If there's a waiting service worker, activate it immediately
-                            if (registration.waiting) {
-                                registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-                            }
+                            // Check for updates periodically
+                            setInterval(() => {
+                                registration.update();
+                            }, 60000); // Check every minute
 
                             // Listen for new service worker becoming available
                             registration.addEventListener('updatefound', () => {
-                                const newWorker = registration.installing;
+                                newWorker = registration.installing;
                                 if (newWorker) {
                                     newWorker.addEventListener('statechange', () => {
                                         if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                            // New version available, activate it
-                                            newWorker.postMessage({ type: 'SKIP_WAITING' });
+                                            // New version available, show banner instead of auto-updating
+                                            showUpdateBanner();
                                         }
                                     });
                                 }

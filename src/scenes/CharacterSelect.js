@@ -12,7 +12,7 @@ export class CharacterSelect extends Phaser.Scene {
 
     create() {
         const { width, height } = this.scale;
-        this.add.text(width / 2, height * 0.08, 'Choose Your Character', { fontSize: '32px', color: '#ffffff' }).setOrigin(0.5);
+        this.add.text(width / 2, height * 0.08, 'Choose Your Character', { fontSize: '56px', color: '#ffffff' }).setOrigin(0.5);
 
         const keys = ['boy1', 'boy2', 'girl1', 'girl2'];
 
@@ -34,7 +34,7 @@ export class CharacterSelect extends Phaser.Scene {
             let baseW = src && src.width ? src.width : img.width;
             let baseH = src && src.height ? src.height : img.height;
             if (src && src.width && src.height) {
-                const maxH = 160;
+                const maxH = 320;
                 const scale = Math.min(1, maxH / src.height);
                 baseW = Math.round(src.width * scale);
                 baseH = Math.round(src.height * scale);

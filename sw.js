@@ -1,4 +1,4 @@
-const CACHE_NAME = 'flingo-resort-v1';
+const CACHE_NAME = 'flingo-resort-v2';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -6,6 +6,8 @@ const urlsToCache = [
   '/src/main.js',
   '/src/sceneConfigs.js',
   '/src/scenes/Start.js',
+  '/src/scenes/TitleScene.js',
+  '/src/scenes/CharacterSelect.js',
   '/src/scenes/PlayScene.js',
   '/manifest.json',
   '/assets/backgrounds/grass.png',

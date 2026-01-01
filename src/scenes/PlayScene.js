@@ -153,6 +153,7 @@ export class PlayScene extends Phaser.Scene {
         else if (cursors.down.isDown) vy = 1;
 
         // Touch input: if touched, move toward touch point (unless arrow keys are pressed)
+        let isUsingTouch = false;
         if (vx === 0 && vy === 0 && this.input.activePointer.isDown) {
             const touchX = this.input.activePointer.x;
             const touchY = this.input.activePointer.y;
@@ -164,6 +165,7 @@ export class PlayScene extends Phaser.Scene {
             if (dist > 10) {
                 vx = dx / dist;
                 vy = dy / dist;
+                isUsingTouch = true;
             }
         }
 
@@ -177,12 +179,15 @@ export class PlayScene extends Phaser.Scene {
             vy *= Math.SQRT1_2;
         }
 
+        // Apply speed (touch is twice as fast as keyboard)
+        const currentSpeed = isUsingTouch ? this.SPEED * 2 : this.SPEED;
+
         if (this.usePhysics) {
-            this.player.setVelocity(vx * this.SPEED, vy * this.SPEED);
+            this.player.setVelocity(vx * currentSpeed, vy * currentSpeed);
         } else {
             // manual position update fallback; do not modify Y with tweens
-            this.player.x += vx * this.SPEED * (this.game.loop.delta / 1000);
-            this.player.y += vy * this.SPEED * (this.game.loop.delta / 1000);
+            this.player.x += vx * currentSpeed * (this.game.loop.delta / 1000);
+            this.player.y += vy * currentSpeed * (this.game.loop.delta / 1000);
         }
 
         // Unified visual clamping: ensure the collision bounds (collisionWidth/Height)
@@ -723,7 +728,8 @@ export class PlayScene extends Phaser.Scene {
 
         // Create dialog text
         this.dialogText = this.add.text(gameWidth / 2, gameHeight * 0.75, text, {
-            fontSize: '20px',
+            fontSize: '40px',
+            fontStyle: 'bold',
             color: '#ffffff',
             align: 'center',
             wordWrap: { width: gameWidth * 0.75 }

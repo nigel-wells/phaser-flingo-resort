@@ -1,0 +1,13 @@
+{
+  "name": "flingo-resort-trimmer",
+  "version": "1.0.0",
+  "description": "Asset trimmer for Flingo Resort - flood-fill background remover for character PNGs",
+  "main": "scripts/trim-assets.js",
+  "scripts": {
+    "trim-assets": "node scripts/trim-assets.js"
+  },
+  "dependencies": {
+    "glob": "^10.3.3",
+    "jimp": "^0.16.13"
+  }
+}

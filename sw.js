@@ -1,4 +1,4 @@
-const CACHE_NAME = 'flingo-resort-v7';
+const CACHE_NAME = 'flingo-resort-v8';
 const urlsToCache = [
   '/',
   '/index.html',

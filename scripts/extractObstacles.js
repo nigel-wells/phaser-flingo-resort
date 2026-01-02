@@ -31,14 +31,15 @@ async function extractObstacles(imagePath, sceneName = 'unknown', gameWidth = 12
 
         // Track visited pixels to avoid duplicate rectangles
         const visited = new Set();
-        const obstacles = [];
+        let redObstacles = [];
+        let greenObstacles = [];
 
         // Helper: convert x,y to index
         const idx = (x, y) => y * width + x;
         const isVisited = (x, y) => visited.has(idx(x, y));
         const markVisited = (x, y) => visited.add(idx(x, y));
 
-        // Helper: check if pixel is red (#ed1c23)
+        // Helper: check if pixel is red (#ed1c23) - blocking obstacles
         const isRed = (x, y) => {
             if (x < 0 || x >= width || y < 0 || y >= height) return false;
             const pixelIdx = Jimp.intToRGBA(image.getPixelColor(x, y));
@@ -53,8 +54,23 @@ async function extractObstacles(imagePath, sceneName = 'unknown', gameWidth = 12
                    Math.abs(b - 35) < tolerance;
         };
 
-        // Flood fill to find connected components of red pixels
-        const floodFill = (startX, startY) => {
+        // Helper: check if pixel is green (#21b04c) - safe obstacles (trigger events only, no collision)
+        const isGreen = (x, y) => {
+            if (x < 0 || x >= width || y < 0 || y >= height) return false;
+            const pixelIdx = Jimp.intToRGBA(image.getPixelColor(x, y));
+            const r = pixelIdx.r;
+            const g = pixelIdx.g;
+            const b = pixelIdx.b;
+            // Target: #21b04c = RGB(33, 176, 76)
+            // Allow some tolerance for compression/scaling artifacts
+            const tolerance = 20;
+            return Math.abs(r - 33) < tolerance && 
+                   Math.abs(g - 176) < tolerance && 
+                   Math.abs(b - 76) < tolerance;
+        };
+
+        // Flood fill to find connected components of colored pixels
+        const floodFill = (startX, startY, colorCheck) => {
             const queue = [{x: startX, y: startY}];
             let minX = startX, maxX = startX, minY = startY, maxY = startY;
             
@@ -62,7 +78,7 @@ async function extractObstacles(imagePath, sceneName = 'unknown', gameWidth = 12
                 const {x, y} = queue.shift();
                 
                 if (x < 0 || x >= width || y < 0 || y >= height) continue;
-                if (isVisited(x, y) || !isRed(x, y)) continue;
+                if (isVisited(x, y) || !colorCheck(x, y)) continue;
                 
                 markVisited(x, y);
                 minX = Math.min(minX, x);
@@ -85,39 +101,65 @@ async function extractObstacles(imagePath, sceneName = 'unknown', gameWidth = 12
             };
         };
 
-        // Find all connected components
+        // Find all red obstacles (blocking)
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
                 if (!isVisited(x, y) && isRed(x, y)) {
-                    const rect = floodFill(x, y);
-                    obstacles.push(rect);
+                    const rect = floodFill(x, y, isRed);
+                    redObstacles.push(rect);
+                }
+            }
+        }
+
+        // Find all green obstacles (safe, trigger events only)
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                if (!isVisited(x, y) && isGreen(x, y)) {
+                    const rect = floodFill(x, y, isGreen);
+                    greenObstacles.push(rect);
                 }
             }
         }
 
         // Sort by position (top-to-bottom, left-to-right) for readability
-        obstacles.sort((a, b) => {
+        redObstacles.sort((a, b) => {
             if (a.y !== b.y) return a.y - b.y;
             return a.x - b.x;
         });
 
-        console.log(`\nRaw rectangles from flood-fill (${obstacles.length}):`);
-        obstacles.forEach((obs, idx) => {
+        greenObstacles.sort((a, b) => {
+            if (a.y !== b.y) return a.y - b.y;
+            return a.x - b.x;
+        });
+
+        console.log(`\nRaw blocking rectangles from flood-fill (${redObstacles.length}):`);
+        redObstacles.forEach((obs, idx) => {
             console.log(`[${idx}] x: ${obs.x}, y: ${obs.y}, width: ${obs.width}, height: ${obs.height}`);
         });
 
+        console.log(`\nRaw safe rectangles from flood-fill (${greenObstacles.length}):`);
+        greenObstacles.forEach((obs, idx) => {
+            console.log(`[${idx}] x: ${obs.x}, y: ${obs.y}, width: ${obs.width}, height: ${obs.height}`);
+        });
         // Filter out very small obstacles
         const MIN_AREA = 500;
         const MIN_HEIGHT = 30;
-        const cleaned = obstacles.filter(obs => obs.width * obs.height >= MIN_AREA && obs.height >= MIN_HEIGHT);
+        const cleaned = redObstacles.filter(obs => obs.width * obs.height >= MIN_AREA && obs.height >= MIN_HEIGHT);
+        const cleanedSafe = greenObstacles.filter(obs => obs.width * obs.height >= MIN_AREA && obs.height >= MIN_HEIGHT);
 
-        console.log(`\nCleaned rectangles before merging (${cleaned.length}):`);
+        console.log(`\nBlocking obstacles - Cleaned rectangles before merging (${cleaned.length}):`);
         cleaned.forEach((obs, idx) => {
+            console.log(`[${idx}] x: ${obs.x}, y: ${obs.y}, width: ${obs.width}, height: ${obs.height}`);
+        });
+
+        console.log(`\nSafe obstacles (no collision, trigger events) - Cleaned rectangles (${cleanedSafe.length}):`);
+        cleanedSafe.forEach((obs, idx) => {
             console.log(`[${idx}] x: ${obs.x}, y: ${obs.y}, width: ${obs.width}, height: ${obs.height}`);
         });
 
         // Output raw rectangles without merging
         const obstacles_final = cleaned;
+        const safeObstacles_final = cleanedSafe;
 
         // Sort obstacles by position
         obstacles_final.sort((a, b) => {
@@ -125,9 +167,19 @@ async function extractObstacles(imagePath, sceneName = 'unknown', gameWidth = 12
             return a.x - b.x;
         });
 
+        safeObstacles_final.sort((a, b) => {
+            if (a.y !== b.y) return a.y - b.y;
+            return a.x - b.x;
+        });
+
         // Output results
-        console.log(`Found ${obstacles_final.length} obstacles:\n`);
+        console.log(`Found ${obstacles_final.length} blocking obstacles:\n`);
         obstacles_final.forEach((obs, idx) => {
+            console.log(`[${idx}] x: ${obs.x}, y: ${obs.y}, width: ${obs.width}, height: ${obs.height}`);
+        });
+
+        console.log(`\nFound ${safeObstacles_final.length} safe obstacles (no collision, trigger events):\n`);
+        safeObstacles_final.forEach((obs, idx) => {
             console.log(`[${idx}] x: ${obs.x}, y: ${obs.y}, width: ${obs.width}, height: ${obs.height}`);
         });
 
@@ -135,6 +187,13 @@ async function extractObstacles(imagePath, sceneName = 'unknown', gameWidth = 12
         console.log(`\nobstacles: [`);
         obstacles_final.forEach((obs, idx) => {
             const comma = idx < obstacles_final.length - 1 ? ',' : '';
+            console.log(`  { x: ${obs.x}, y: ${obs.y}, width: ${obs.width}, height: ${obs.height} }${comma}`);
+        });
+        console.log(`]`);
+
+        console.log(`\nsafeObstacles: [`);
+        safeObstacles_final.forEach((obs, idx) => {
+            const comma = idx < safeObstacles_final.length - 1 ? ',' : '';
             console.log(`  { x: ${obs.x}, y: ${obs.y}, width: ${obs.width}, height: ${obs.height} }${comma}`);
         });
         console.log(`]`);

@@ -32,5 +32,5 @@ const config = {
 
 const game = new Phaser.Game(config);
 // Set debug flag in game registry so scenes can access it
-game.registry.set('debugMode', false);
+game.registry.set('debugMode', true);
             

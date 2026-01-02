@@ -370,6 +370,20 @@ export class PlayScene extends Phaser.Scene {
             }
         }
 
+        // Create scaled safe obstacles (no collision, trigger events only)
+        this.scaledSafeObstacles = [];
+        if (cfg.safeObstacles) {
+            for (const obs of cfg.safeObstacles) {
+                this.scaledSafeObstacles.push({
+                    ...obs,
+                    x: obs.x * this.scaleFactor,
+                    y: obs.y * this.scaleFactor,
+                    width: obs.width * this.scaleFactor,
+                    height: obs.height * this.scaleFactor
+                });
+            }
+        }
+
         // Apply character scale if different from current scene
         const newSceneScale = cfg.characterScale || 1.0;
         if (this.currentSceneScale !== newSceneScale) {
@@ -479,10 +493,33 @@ export class PlayScene extends Phaser.Scene {
         this.drawObstacleDebug();
     }
 
+    triggerObstacleEvent(obstacle, side) {
+        if (!obstacle.eventTrigger || obstacle.eventTrigger.side !== side) {
+            return false;
+        }
+
+        if (obstacle.eventTrigger.action === 'switchScene') {
+            const targetScene = obstacle.eventTrigger.targetScene;
+            const entryDir = obstacle.eventTrigger.entryDir || 'fromTop';
+            if (targetScene && sceneConfigs[targetScene]) {
+                const prev = this.currentBackground;
+                this.exitLockedUntil = Date.now() + this.exitLockDuration;
+                this.applySceneConfig(targetScene, { entry: entryDir, fromScene: prev });
+                console.log('Event trigger: Scene switch from', prev, 'to', targetScene, 'via', side, 'of obstacle, entry:', entryDir);
+                return true;
+            }
+        } else if (obstacle.eventTrigger.action === 'dialog') {
+            this.showDialog(obstacle.eventTrigger.text);
+            return true;
+        }
+        return false;
+    }
+
     checkObstacleCollisions() {
         const obstacles = this.scaledObstacles || [];
+        const safeObstacles = this.scaledSafeObstacles || [];
 
-        if (obstacles.length === 0) return;
+        if (obstacles.length === 0 && safeObstacles.length === 0) return;
 
         const ox = (typeof this.player.originX === 'number') ? this.player.originX : 0.5;
         const oy = (typeof this.player.originY === 'number') ? this.player.originY : 0.5;
@@ -492,14 +529,14 @@ export class PlayScene extends Phaser.Scene {
         const feetHeight = fullHeight * 0.1;
         const COLLISION_PADDING = 5;
 
-        // Helper to check collision at position and return which obstacle with side info
-        const checkCollisionAt = (x, y) => {
+        // Helper to check collision at position against specific obstacle list
+        const checkCollisionAt = (x, y, obstacleList) => {
             const pLeft = x - fullWidth * ox;
             const pRight = pLeft + fullWidth;
             const pBottom = y + fullHeight * (1 - oy);
             const pFeetTop = pBottom - feetHeight;
 
-            for (const obs of obstacles) {
+            for (const obs of obstacleList) {
                 const feetOverlapsHorizontally = pRight > obs.x - COLLISION_PADDING && pLeft < obs.x + obs.width + COLLISION_PADDING;
                 const feetOverlapsVertically = pBottom > obs.y - COLLISION_PADDING && pFeetTop < obs.y + obs.height + COLLISION_PADDING;
                 if (feetOverlapsHorizontally && feetOverlapsVertically) {
@@ -528,7 +565,16 @@ export class PlayScene extends Phaser.Scene {
             return null;
         };
 
-        const collision = checkCollisionAt(this.player.x, this.player.y);
+        // Check safe obstacles first (no collision blocking, just events)
+        if (safeObstacles.length > 0) {
+            const safeCollision = checkCollisionAt(this.player.x, this.player.y, safeObstacles);
+            if (safeCollision) {
+                this.triggerObstacleEvent(safeCollision.obstacle, safeCollision.side);
+            }
+        }
+
+        // Check blocking obstacles (collision + events)
+        const collision = checkCollisionAt(this.player.x, this.player.y, obstacles);
 
         if (collision) {
             const collidingObstacle = collision.obstacle;
@@ -536,22 +582,9 @@ export class PlayScene extends Phaser.Scene {
             
             this.lastCollidingObstacle = collidingObstacle;
             
-            // Check if this obstacle has an event trigger for this side
-            if (collidingObstacle.eventTrigger && collidingObstacle.eventTrigger.side === hitSide) {
-                if (collidingObstacle.eventTrigger.action === 'switchScene') {
-                    const targetScene = collidingObstacle.eventTrigger.targetScene;
-                    const entryDir = collidingObstacle.eventTrigger.entryDir || 'fromTop';
-                    if (targetScene && sceneConfigs[targetScene]) {
-                        const prev = this.currentBackground;
-                        this.exitLockedUntil = Date.now() + this.exitLockDuration;
-                        this.applySceneConfig(targetScene, { entry: entryDir, fromScene: prev });
-                        console.log('Event trigger: Scene switch from', prev, 'to', targetScene, 'via', hitSide, 'of obstacle, entry:', entryDir);
-                        return;
-                    }
-                } else if (collidingObstacle.eventTrigger.action === 'dialog') {
-                    this.showDialog(collidingObstacle.eventTrigger.text);
-                    // Don't return - let collision blocking continue below
-                }
+            // Trigger event if applicable
+            if (this.triggerObstacleEvent(collidingObstacle, hitSide)) {
+                return;
             }
             
             // Calculate obstacle center
@@ -588,7 +621,7 @@ export class PlayScene extends Phaser.Scene {
                 }
                 
                 // Only apply push if it doesn't immediately hit another obstacle
-                const testCollision = checkCollisionAt(newX, newY);
+                const testCollision = checkCollisionAt(newX, newY, obstacles);
                 if (!testCollision) {
                     this.player.x = newX;
                     this.player.y = newY;
@@ -604,7 +637,7 @@ export class PlayScene extends Phaser.Scene {
                         // Tried vertical, try horizontal
                         newX += deltaX > 0 ? pushDist : -pushDist;
                     }
-                    const testCollision2 = checkCollisionAt(newX, newY);
+                    const testCollision2 = checkCollisionAt(newX, newY, obstacles);
                     if (!testCollision2) {
                         this.player.x = newX;
                         this.player.y = newY;
@@ -621,7 +654,7 @@ export class PlayScene extends Phaser.Scene {
                         for (const dir of directions) {
                             const testX = this.player.x + dir.x;
                             const testY = this.player.y + dir.y;
-                            if (!checkCollisionAt(testX, testY)) {
+                            if (!checkCollisionAt(testX, testY, obstacles)) {
                                 this.player.x = testX;
                                 this.player.y = testY;
                                 console.log('  ACTION: PUSHED AWAY (cardinal direction escape)');
@@ -660,15 +693,27 @@ export class PlayScene extends Phaser.Scene {
         if (!this.debugGraphics) return;
         
         const obstacles = this.scaledObstacles || [];
+        const safeObstacles = this.scaledSafeObstacles || [];
         
         this.debugGraphics.clear();
         
-        // Draw red obstacles
+        // Draw red blocking obstacles
         if (this.debugMode && obstacles.length > 0) {
             this.debugGraphics.lineStyle(3, 0xff0000, 1); // Red outline, 3px thick
             this.debugGraphics.fillStyle(0xff0000, 0.2); // Red fill, 20% opacity
             
             for (const obs of obstacles) {
+                this.debugGraphics.fillRect(obs.x, obs.y, obs.width, obs.height);
+                this.debugGraphics.strokeRect(obs.x, obs.y, obs.width, obs.height);
+            }
+        }
+
+        // Draw green safe obstacles (no collision, trigger events only)
+        if (this.debugMode && safeObstacles.length > 0) {
+            this.debugGraphics.lineStyle(3, 0x00ff00, 1); // Green outline, 3px thick
+            this.debugGraphics.fillStyle(0x00ff00, 0.15); // Green fill, 15% opacity
+            
+            for (const obs of safeObstacles) {
                 this.debugGraphics.fillRect(obs.x, obs.y, obs.width, obs.height);
                 this.debugGraphics.strokeRect(obs.x, obs.y, obs.width, obs.height);
             }
@@ -852,6 +897,20 @@ export class PlayScene extends Phaser.Scene {
                     });
                 }
             }
+
+            // Rescale safe obstacles
+            this.scaledSafeObstacles = [];
+            if (currentCfg.safeObstacles) {
+                for (const obs of currentCfg.safeObstacles) {
+                    this.scaledSafeObstacles.push({
+                        ...obs,
+                        x: obs.x * this.scaleFactor,
+                        y: obs.y * this.scaleFactor,
+                        width: obs.width * this.scaleFactor,
+                        height: obs.height * this.scaleFactor
+                    });
+                }
+            }
             
             // Reposition player if they're outside new bounds
             const margin = 50;
@@ -957,49 +1016,6 @@ export class PlayScene extends Phaser.Scene {
             }
             
             this.dialogText.setWordWrapWidth(screenWidth * 0.75);
-        }
-    }
-
-    drawObstacleDebug() {
-        if (!this.debugGraphics) return;
-        
-        const obstacles = this.scaledObstacles || [];
-        
-        this.debugGraphics.clear();
-        
-        // Draw red obstacles
-        if (this.debugMode && obstacles.length > 0) {
-            this.debugGraphics.lineStyle(3, 0xff0000, 1); // Red outline, 3px thick
-            this.debugGraphics.fillStyle(0xff0000, 0.2); // Red fill, 20% opacity
-            
-            for (const obs of obstacles) {
-                this.debugGraphics.fillRect(obs.x, obs.y, obs.width, obs.height);
-                this.debugGraphics.strokeRect(obs.x, obs.y, obs.width, obs.height);
-            }
-        }
-
-        // Draw blue box around fixed collision bounds
-        if (this.debugMode && this.player) {
-            const ox = (typeof this.player.originX === 'number') ? this.player.originX : 0.5;
-            const oy = (typeof this.player.originY === 'number') ? this.player.originY : 0.5;
-            
-            const pLeft = this.player.x - this.collisionWidth * ox;
-            const pTop = this.player.y - this.collisionHeight * oy;
-            
-            this.debugGraphics.lineStyle(2, 0x0000ff, 1); // Blue outline, 2px thick
-            this.debugGraphics.strokeRect(pLeft, pTop, this.collisionWidth, this.collisionHeight);
-        }
-
-        // Draw purple box around animated display bounds
-        if (this.debugMode && this.player) {
-            const ox = (typeof this.player.originX === 'number') ? this.player.originX : 0.5;
-            const oy = (typeof this.player.originY === 'number') ? this.player.originY : 0.5;
-            
-            const pLeft = this.player.x - this.player.displayWidth * ox;
-            const pTop = this.player.y - this.player.displayHeight * oy;
-            
-            this.debugGraphics.lineStyle(2, 0xff00ff, 1); // Purple outline, 2px thick
-            this.debugGraphics.strokeRect(pLeft, pTop, this.player.displayWidth, this.player.displayHeight);
         }
     }
 

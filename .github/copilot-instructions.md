@@ -33,14 +33,33 @@ This is a Phaser 3 HTML5 game using ES6 modules, focused on 2D pixel-art. Open `
 - **Critical**: After resizing, update `baseScaleX`, `baseScaleY`, `targetScaleX`, and `targetScaleY` so the squash/stretch animation uses the new scale as baseline
 
 ## Obstacle System & Collision Detection
-- Obstacles are defined per-scene in `sceneConfigs.js` as rectangles: `{ x, y, width, height }`
+
+### Two Types of Obstacles
+**Blocking Obstacles (Red)** - Prevent player movement and stop the character:
+- Defined in `obstacles` array in `sceneConfigs.js`
+- Player cannot pass through; movement is blocked when moving *toward* the obstacle
+- Can have optional `eventTrigger` property for scene transitions or dialogs
+- Visualized as red boxes in debug mode
+
+**Safe Obstacles (Green)** - Do NOT block movement, used for interactive zones:
+- Defined in `safeObstacles` array in `sceneConfigs.js`
+- Player walks through freely without collision blocking
+- Can have `eventTrigger` property to trigger dialogs or other events when entered
+- Visualized as green boxes in debug mode
+- Useful for: NPCs zones, interactive hotspots, story triggers, collectible areas
+
+### Collision Detection Details
 - Collision detection checks only the bottom 10% of the character ("feet") against obstacles with 5px padding
-- Character can walk into/through obstacles if moving *away* from obstacle center; blocked if moving *toward* it
+- For blocking obstacles: Character can walk into/through if moving *away* from obstacle center; blocked if moving *toward* it
 - If stuck (no movement), character is auto-pushed away from obstacle center (intelligently avoiding adjacent obstacles)
 - **Side Detection**: Collision system detects which side (top/bottom/left/right) was hit by calculating distance to each obstacle edge
-- **Event Triggers**: Obstacles can have `eventTrigger` property to trigger scene changes:
+- **Event Triggers**: Both obstacle types can have `eventTrigger` property to trigger actions:
   ```javascript
+  // Blocking obstacle with scene switch on bottom side
   { x: 695, y: 0, width: 146, height: 479, eventTrigger: { side: 'bottom', action: 'switchScene', targetScene: 'resort-reception', entryDir: 'fromTop' } }
+  
+  // Safe obstacle with dialog trigger
+  { x: 400, y: 300, width: 200, height: 100, eventTrigger: { side: 'top', action: 'dialog', text: 'Welcome to the pool!' } }
   ```
 - Scene exits are locked for 800ms after switching to prevent accidental re-triggering
 
@@ -65,16 +84,22 @@ This is a Phaser 3 HTML5 game using ES6 modules, focused on 2D pixel-art. Open `
 - Dialog system is a placeholder for future expansion (quests, conversations, etc.)
 
 ## Extracting Obstacles from Mask Images
-- Create a red (#ed1c23) mask image at the same dimensions as your background (1536×1024)
+- Create mask images at the same dimensions as your background (1536×1024) with colored regions:
+  - **Red (#ed1c23)** for blocking collision obstacles
+  - **Green (#21b04c)** for safe/interactive zones (no collision, trigger events)
 - Place mask files in `assets/backgrounds/masks/` folder
 - Run extraction script: `node scripts/extractObstacles.js <path-to-mask> [sceneName] [gameWidth] [gameHeight]`
 - Example: `node scripts/extractObstacles.js assets/backgrounds/masks/grass.png grass 1536 1024`
-- Script detects red pixels, identifies continuous rectangular regions, and outputs formatted obstacle config for `sceneConfigs.js`
+- Script detects both red and green pixels, identifies continuous rectangular regions, and outputs formatted obstacle configs for `sceneConfigs.js`
 - The extraction uses:
-  - Precise color detection: RGB(237, 28, 35) with ±20 tolerance per channel
+  - Precise color detection: 
+    - Red: RGB(237, 28, 35) ±20 tolerance per channel (blocking obstacles)
+    - Green: RGB(33, 176, 76) ±20 tolerance per channel (safe obstacles)
   - Minimum area filter: 500 sq pixels (removes noise)
+  - Minimum height filter: 30 pixels (prevents slivers)
   - Horizontal rectangle scanning with automatic merging of adjacent spans
   - Output is sorted top-to-bottom, left-to-right for readability
+- Script outputs two arrays in the console: one for `obstacles` (red) and one for `safeObstacles` (green)
 
 ## Asset Layout Examples
 - Characters: `assets/characters/player.png`, `assets/characters/npc1.png`, or `assets/characters/player_spritesheet.png`.

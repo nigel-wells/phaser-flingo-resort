@@ -130,7 +130,7 @@ export const sceneConfigs = {
       fromRight: { x: -16 }
     },
     entryPositions: {
-      fromLeft: (w, h) => ({ x: 16, y: Math.round(h * 0.5) }),
+      fromLeft: (w, h) => ({ x: 650, y: 320 }),
       fromRight: (w, h) => ({ x: w - 16, y: Math.round(h * 0.6) }),
       fromTop: (w, h) => ({ x: Math.round(w * 0.5), y: h - 16 }), // Entering from resort-reception, appear at bottom
       fromBottom: (w, h) => ({ x: Math.round(w * 0.5), y: 16 })
@@ -144,10 +144,14 @@ export const sceneConfigs = {
       top: null,
       bottom: null
     },
-    // obstacles from red mask analysis at 1536x1024 (to be extracted from resort-pool.png mask)
-    obstacles: [],
+    // obstacles from red mask analysis at 1536x1024
+    obstacles: [
+      { x: 0, y: 0, width: 683, height: 472 },
+      { x: 687, y: 0, width: 170, height: 449, eventTrigger: { side: 'bottom', action: 'switchScene', targetScene: 'resort-reception', entryDir: 'fromRight' } },
+      { x: 865, y: 0, width: 671, height: 473 }
+    ],
     // character scale for this scene
-    characterScale: 1.0,
+    characterScale: 0.8,
     // NPCs and interactive objects in this scene
     npcs: [],
     bounds: null

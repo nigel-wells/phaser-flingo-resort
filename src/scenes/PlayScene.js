@@ -37,7 +37,7 @@ export class PlayScene extends Phaser.Scene {
         this.bg = this.add.sprite(scaledWidth / 2, scaledHeight / 2, 'grass');
         this.bg.setScale(this.scaleFactor);
         this.bg.setScrollFactor(1); // Move with camera for panning effect
-        this.currentBackground = 'grass'; // default starting scene
+        this.currentBackground = 'resort-reception'; // default starting scene
 
         // Create world bounds and player — scaled to match window
         this.worldWidth = scaledWidth;

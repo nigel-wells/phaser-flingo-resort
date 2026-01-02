@@ -147,20 +147,26 @@ export const sceneConfigs = {
     // obstacles from red mask analysis at 1536x1024
     obstacles: [
       { x: 0, y: 0, width: 683, height: 472 },
-      { x: 687, y: 0, width: 170, height: 449, eventTrigger: { side: 'bottom', action: 'switchScene', targetScene: 'resort-reception', entryDir: 'fromRight' } },
+      { x: 687, y: 0, width: 170, height: 449 },
       { x: 865, y: 0, width: 671, height: 473 }
     ],
     // safe obstacles from green mask analysis (no collision, trigger events only)
     safeObstacles: [
-      { x: 489, y: 561, width: 543, height: 60, eventTrigger: { side: 'top', action: 'dialog', text: 'Welcome to the pool area!' } },
-      { x: 433, y: 625, width: 679, height: 45, eventTrigger: { side: 'top', action: 'dialog', text: 'Enjoy the water!' } },
-      { x: 327, y: 673, width: 888, height: 78, eventTrigger: { side: 'top', action: 'dialog', text: 'Please stay in the designated swimming area' } },
-      { x: 247, y: 753, width: 1042, height: 72, eventTrigger: { side: 'top', action: 'dialog', text: 'Pool rules apply!' } }
+      { x: 527, y: 585, width: 494, height: 110, eventTrigger: { side: 'top', action: 'prop', propKey: 'pool-ring', characterCrop: { y: 0, height: 50 } } },
+      { x: 375, y: 704, width: 776, height: 120, eventTrigger: { side: 'top', action: 'prop', propKey: 'pool-ring', characterCrop: { y: 0, height: 50 } } },
+      { x: 225, y: 835, width: 1112, height: 159, eventTrigger: { side: 'top', action: 'prop', propKey: 'pool-ring', characterCrop: { y: 0, height: 50 } } }
     ],
     // character scale for this scene
     characterScale: 0.8,
     // NPCs and interactive objects in this scene
     npcs: [],
+    // Props - interactive objects with positioning and effects
+    props: [
+      {
+        key: 'pool-ring',           // Texture key (must be preloaded from assets/props/)
+        scale: 0.8                  // Optional scale multiplier
+      }
+    ],
     bounds: null
   }
 };

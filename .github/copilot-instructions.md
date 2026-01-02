@@ -83,6 +83,33 @@ This is a Phaser 3 HTML5 game using ES6 modules, focused on 2D pixel-art. Open `
 - Must be preloaded in `PlayScene.preload()` before use
 - Dialog system is a placeholder for future expansion (quests, conversations, etc.)
 
+## Props & Interactive Objects System
+- Props are interactive visual objects that can be layered on top of characters
+- Props are defined per-scene in `sceneConfigs.js` under a `props` array:
+  ```javascript
+  props: [
+    {
+      key: 'pool-ring',       // Texture key (must be preloaded from assets/props/)
+      scale: 0.8              // Optional scale multiplier
+    }
+  ]
+  ```
+- Props are triggered through safe obstacle `eventTrigger` actions:
+  ```javascript
+  eventTrigger: { 
+    side: 'top', 
+    action: 'prop', 
+    propKey: 'pool-ring',
+    characterCrop: { y: 50, height: 50 }  // Optional: crop character (percentages 0-100)
+  }
+  ```
+- Character cropping uses percentage-based coordinates (0-100) relative to source image dimensions
+- Cropping example: `{ y: 0, height: 50 }` shows the top 50% and hides the bottom 50% (sitting effect)
+- Props are automatically removed when entering a new scene
+- Props follow the character's position and flip with direction changes
+- Prop asset files should be placed in `assets/props/` (e.g., `assets/props/pool-ring.png`)
+- Must be preloaded in `PlayScene.preload()` before use
+
 ## Extracting Obstacles from Mask Images
 - Create mask images at the same dimensions as your background (1536×1024) with colored regions:
   - **Red (#ed1c23)** for blocking collision obstacles
@@ -105,6 +132,7 @@ This is a Phaser 3 HTML5 game using ES6 modules, focused on 2D pixel-art. Open `
 - Characters: `assets/characters/player.png`, `assets/characters/npc1.png`, or `assets/characters/player_spritesheet.png`.
 - Backgrounds: `assets/backgrounds/sky.png`, `assets/backgrounds/grass.png`, `assets/backgrounds/resort-outside.png`.
 - Obstacle masks: `assets/backgrounds/masks/grass.png`, `assets/backgrounds/masks/resort-outside.png`.
+- Props: `assets/props/pool-ring.png`, `assets/props/floatie.png`, etc.
 
 ## Development Workflow
 - Edit scenes in `src/scenes/` and `src/main.js`. Reload `index.html` in the browser to test.

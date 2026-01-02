@@ -21,6 +21,8 @@ export class PlayScene extends Phaser.Scene {
         this.load.image('girl2', 'assets/characters/girl2.png');
         // NPCs
         this.load.image('flingo', 'assets/characters/flingo.png');
+        // Props
+        this.load.image('pool-ring', 'assets/props/pool-ring.png');
     }
 
     create() {
@@ -37,7 +39,7 @@ export class PlayScene extends Phaser.Scene {
         this.bg = this.add.sprite(scaledWidth / 2, scaledHeight / 2, 'grass');
         this.bg.setScale(this.scaleFactor);
         this.bg.setScrollFactor(1); // Move with camera for panning effect
-        this.currentBackground = 'resort-reception'; // default starting scene
+        this.currentBackground = 'grass'; // default starting scene
 
         // Create world bounds and player — scaled to match window
         this.worldWidth = scaledWidth;
@@ -142,6 +144,11 @@ export class PlayScene extends Phaser.Scene {
 
         // Storage for NPCs and interactive objects
         this.npcs = {}; // key -> sprite
+
+        // Storage for props
+        this.activeProp = null; // Currently active prop sprite
+        this.activePropKey = null; // Key of the active prop
+        this.activeSafePropObstacle = null; // Currently active safe obstacle with prop trigger
 
         // Dialog system
         this.dialogBox = null;
@@ -301,6 +308,12 @@ export class PlayScene extends Phaser.Scene {
         this.player.scaleX = Phaser.Math.Linear(this.player.scaleX, this.targetScaleX, lerp);
         this.player.scaleY = Phaser.Math.Linear(this.player.scaleY, this.targetScaleY, lerp);
 
+        // Keep prop positioned on character if active
+        if (this.activeProp) {
+            this.activeProp.setPosition(this.player.x, this.player.y);
+            this.activeProp.setFlipX(this.player.flipX);
+        }
+
         // Redraw debug graphics every frame so blue box follows character
         this.drawObstacleDebug();
 
@@ -344,6 +357,17 @@ export class PlayScene extends Phaser.Scene {
         const cfg = sceneConfigs[sceneKey];
         if (!cfg) return;
         this.currentBackground = sceneKey;
+        
+        // Clear active prop and character crop before changing scene
+        if (this.activeProp) {
+            this.activeProp.destroy();
+            this.activeProp = null;
+            this.activePropKey = null;
+        }
+        const src = this.textures.get(this.selected).getSourceImage();
+        if (src && src.width && src.height) {
+            this.player.setCrop(0, 0, src.width, src.height);
+        }
         
         // Update background texture and scale to match window width
         this.bg.setTexture(cfg.texture || cfg.key);
@@ -511,8 +535,76 @@ export class PlayScene extends Phaser.Scene {
         } else if (obstacle.eventTrigger.action === 'dialog') {
             this.showDialog(obstacle.eventTrigger.text);
             return true;
+        } else if (obstacle.eventTrigger.action === 'prop') {
+            const propKey = obstacle.eventTrigger.propKey;
+            const characterCrop = obstacle.eventTrigger.characterCrop;
+            this.activateProp(propKey, characterCrop);
+            return true;
         }
         return false;
+    }
+
+    activateProp(propKey, characterCrop) {
+        // Remove previous prop if any
+        if (this.activeProp) {
+            this.activeProp.destroy();
+            this.activeProp = null;
+        }
+
+        // Apply character crop if specified (percentage-based)
+        if (characterCrop) {
+            const src = this.textures.get(this.selected).getSourceImage();
+            if (src && src.width && src.height) {
+                // Convert percentages to source image pixels
+                const cropY = Math.round((characterCrop.y || 0) / 100 * src.height);
+                const cropHeight = Math.round((characterCrop.height || 100) / 100 * src.height);
+                
+                // Apply crop to player character
+                this.player.setCrop(0, cropY, src.width, cropHeight);
+            }
+        }
+
+        // Create and position the prop on top of the character
+        if (this.textures.exists(propKey)) {
+            this.activeProp = this.add.sprite(this.player.x, this.player.y, propKey);
+            this.activePropKey = propKey;
+
+            // Scale the prop (use scene config if available)
+            const sceneConfig = sceneConfigs[this.currentBackground] || {};
+            const propConfig = sceneConfig.props?.find(p => p.key === propKey);
+            const propScale = propConfig?.scale || 1.0;
+
+            const src = this.textures.get(propKey).getSourceImage();
+            if (src && src.width && src.height) {
+                const desiredH = 240 * this.scaleFactor;
+                const scale = desiredH / src.height;
+                const baseW = src.width * scale;
+                const baseH = src.height * scale;
+                
+                const finalW = Math.round(baseW * this.currentSceneScale * propScale);
+                const finalH = Math.round(baseH * this.currentSceneScale * propScale);
+                this.activeProp.setDisplaySize(finalW, finalH);
+            }
+
+            // Set prop depth below player so character appears on top
+            this.activeProp.setDepth(99);
+            this.activeProp.setOrigin(0.5, 0.5);
+        }
+    }
+
+    deactivateProp() {
+        // Remove active prop sprite
+        if (this.activeProp) {
+            this.activeProp.destroy();
+            this.activeProp = null;
+            this.activePropKey = null;
+        }
+
+        // Remove character crop to return them to normal
+        const src = this.textures.get(this.selected).getSourceImage();
+        if (src && src.width && src.height) {
+            this.player.setCrop(0, 0, src.width, src.height);
+        }
     }
 
     checkObstacleCollisions() {
@@ -569,7 +661,17 @@ export class PlayScene extends Phaser.Scene {
         if (safeObstacles.length > 0) {
             const safeCollision = checkCollisionAt(this.player.x, this.player.y, safeObstacles);
             if (safeCollision) {
+                // Check if this obstacle has a prop trigger
+                if (safeCollision.obstacle.eventTrigger?.action === 'prop') {
+                    this.activeSafePropObstacle = safeCollision.obstacle;
+                }
                 this.triggerObstacleEvent(safeCollision.obstacle, safeCollision.side);
+            } else {
+                // No longer in a safe obstacle - deactivate prop if we were in one
+                if (this.activeSafePropObstacle) {
+                    this.deactivateProp();
+                    this.activeSafePropObstacle = null;
+                }
             }
         }
 
@@ -746,6 +848,20 @@ export class PlayScene extends Phaser.Scene {
 
     renderNPCs(sceneKey) {
         const cfg = sceneConfigs[sceneKey];
+        
+        // Clear props from previous scene
+        if (this.activeProp) {
+            this.activeProp.destroy();
+            this.activeProp = null;
+            this.activePropKey = null;
+        }
+        
+        // Remove character crop when changing scenes
+        const src = this.textures.get(this.selected).getSourceImage();
+        if (src && src.width && src.height) {
+            this.player.setCrop(0, 0, src.width, src.height);
+        }
+        
         if (!cfg || !cfg.npcs) {
             // Clear existing NPCs if no NPCs in new scene
             Object.values(this.npcs).forEach(sprite => sprite.destroy());
